@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
-// Supabase — reemplazar con valores de tu proyecto
-// Dashboard: supabase.com → proyecto → Settings → API
-const String kSupabaseUrl     = 'https://TU_PROYECTO.supabase.co';
-const String kSupabaseAnonKey = 'TU_ANON_KEY';
+const String kSupabaseUrl     = 'https://kmreiniqgcvqgdtzvmel.supabase.co';
+const String kSupabaseAnonKey = 'sb_publishable_j6btNHo1o3tSprmYUJITPw_8AsYgcvJ';
 
 // SharedPreferences keys
 const String kDeviceIdKey  = 'device_id';
