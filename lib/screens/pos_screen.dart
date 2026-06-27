@@ -53,9 +53,9 @@ class _PosScreenState extends State<PosScreen> {
     final prov = context.read<ProductosProvider>();
     final carrito = context.read<CarritoProvider>();
 
-    // Numeric input → try barcode lookup first
+    // Numeric input → try barcode lookup first (local cache)
     if (RegExp(r'^\d+$').hasMatch(query)) {
-      final prod = await prov.buscarPorCodigo(query);
+      final prod = prov.buscarPorCodigoLocal(query);
       if (prod != null) {
         carrito.agregar(prod);
         _searchCtrl.clear();

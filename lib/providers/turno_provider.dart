@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../config.dart';
+import '../main.dart';
 import '../models/turno.dart';
 import '../models/venta.dart';
-import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/db_service.dart';
 
@@ -13,31 +15,39 @@ class TurnoProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get hayTurnoActivo => _turnoActivo != null;
 
-  /// Loads the active shift from the local DB.
-  /// If nothing is found locally it queries [SPObtenerTurnoActivo] on the
-  /// server and persists the result so subsequent launches work offline.
+  Future<String> _getTerminal() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(kTerminalKey) ?? 'Terminal 1';
+  }
+
   Future<void> cargarTurnoActivo() async {
     _isLoading = true;
     notifyListeners();
     try {
+      // 1. Buscar en SQLite local
       _turnoActivo = await DbService.instance.getTurnoActivo();
 
+      // 2. Si no hay local, buscar en Supabase
       if (_turnoActivo == null) {
-        // Fall back to server lookup.
         try {
-          final token = await AuthService.instance.getToken();
-          if (token != null) {
-            final rows = await ApiService.instance
-                .post("Exec SPObtenerTurnoActivo @Token='$token'");
-            if (rows.isNotEmpty && (rows[0] as List).isNotEmpty) {
-              final turno =
-                  Turno.fromJson((rows[0] as List).first as Map<String, dynamic>);
+          final email = AuthService.instance.email;
+          if (email != null) {
+            final rows = await supabase
+                .from('pos_turno')
+                .select()
+                .eq('licencia_email', email)
+                .eq('estado', 'ABIERTO')
+                .order('fecha_apertura', ascending: false)
+                .limit(1);
+
+            if (rows.isNotEmpty) {
+              final turno = Turno.fromSupabase(rows.first);
               await DbService.instance.guardarTurno(turno);
               _turnoActivo = turno;
             }
           }
         } catch (_) {
-          // Server unavailable – no active shift found.
+          // Sin internet — no hay turno activo
         }
       }
     } finally {
@@ -46,23 +56,42 @@ class TurnoProvider extends ChangeNotifier {
     }
   }
 
-  /// Opens a new shift on the server and stores it locally.
-  /// Returns [true] on success.
   Future<bool> abrirTurno(double efectivoInicial) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final token = await AuthService.instance.getToken();
-      final terminal = await AuthService.instance.getTerminal();
-      if (token == null || terminal == null) return false;
+      final email = AuthService.instance.email;
+      final terminal = await _getTerminal();
+      if (email == null) return false;
 
-      final rows = await ApiService.instance.post(
-        "Exec SPAbrirTurno @Token='$token', "
-        "@EfectivoInicial=$efectivoInicial, @Terminal='$terminal'",
+      final row = {
+        'licencia_email':   email,
+        'terminal':         terminal,
+        'sucursal':         'Principal',
+        'efectivo_inicial': efectivoInicial,
+        'estado':           'ABIERTO',
+        'fecha_apertura':   DateTime.now().toIso8601String(),
+      };
+
+      int? supaId;
+      try {
+        final res = await supabase
+            .from('pos_turno')
+            .insert(row)
+            .select('id')
+            .single();
+        supaId = res['id'] as int?;
+      } catch (_) {
+        // Sin internet — abrimos solo local
+      }
+
+      final turno = Turno(
+        id: supaId,
+        efectivoInicial: efectivoInicial,
+        estado: 'ABIERTO',
+        fechaApertura: DateTime.now().toIso8601String(),
+        terminal: terminal,
       );
-      if (rows.isEmpty || (rows[0] as List).isEmpty) return false;
-
-      final turno = Turno.fromJson((rows[0] as List).first as Map<String, dynamic>);
       await DbService.instance.guardarTurno(turno);
       _turnoActivo = turno;
       return true;
@@ -74,11 +103,6 @@ class TurnoProvider extends ChangeNotifier {
     }
   }
 
-  /// Closes the active shift.
-  ///
-  /// [totalContado] is the physical cash amount counted at closing time.
-  /// The provider calculates the difference against the sum of local sales
-  /// and sends it to [SPCerrarTurno]. Returns [true] on success.
   Future<bool> cerrarTurno(double totalContado) async {
     final turno = _turnoActivo;
     if (turno == null || turno.id == null) return false;
@@ -86,21 +110,20 @@ class TurnoProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final token = await AuthService.instance.getToken();
-      if (token == null) return false;
-
-      // Sum all sales registered locally for this shift.
-      final List<Venta> ventas =
-          await DbService.instance.getVentasTurno(turno.id!);
-      final double totalVentas =
-          ventas.fold(0.0, (sum, v) => sum + v.total);
+      final List<Venta> ventas = await DbService.instance.getVentasTurno(turno.id!);
+      final double totalVentas = ventas.fold(0.0, (sum, v) => sum + v.total);
       final double diferencia = totalContado - totalVentas;
 
-      final rows = await ApiService.instance.post(
-        "Exec SPCerrarTurno @Token='$token', @IDTurno=${turno.id}, "
-        "@TotalContado=$totalContado, @Diferencia=$diferencia",
-      );
-      if (rows.isEmpty || (rows[0] as List).isEmpty) return false;
+      try {
+        await supabase.from('pos_turno').update({
+          'estado':        'CERRADO',
+          'fecha_cierre':  DateTime.now().toIso8601String(),
+          'total_contado': totalContado,
+          'diferencia':    diferencia,
+        }).eq('id', turno.id!);
+      } catch (_) {
+        // Sin internet — cerrar solo local
+      }
 
       await DbService.instance.cerrarTurnoLocal(turno.id!);
       _turnoActivo = null;

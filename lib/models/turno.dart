@@ -52,16 +52,14 @@ class Turno {
     );
   }
 
-  /// Creates a Turno from an APISQL JSON response row.
-  factory Turno.fromJson(Map<String, dynamic> json) {
+  /// Creates a Turno from a Supabase row (tabla pos_turno de mi-pos).
+  factory Turno.fromSupabase(Map<String, dynamic> json) {
     return Turno(
-      id: (json['IDTurno'] as num?)?.toInt(),
-      efectivoInicial:
-          (json['EfectivoInicial'] as num?)?.toDouble() ?? 0.0,
-      estado: (json['Estado'] as String?) ?? 'ABIERTO',
-      fechaApertura:
-          (json['FechaApertura'] as String?) ?? DateTime.now().toIso8601String(),
-      terminal: (json['Terminal'] as String?) ?? '',
+      id: (json['id'] as num?)?.toInt(),
+      efectivoInicial: (json['efectivo_inicial'] as num?)?.toDouble() ?? 0.0,
+      estado: (json['estado'] as String?) ?? 'ABIERTO',
+      fechaApertura: (json['fecha_apertura'] as String?) ?? DateTime.now().toIso8601String(),
+      terminal: (json['terminal'] as String?) ?? '',
     );
   }
 }

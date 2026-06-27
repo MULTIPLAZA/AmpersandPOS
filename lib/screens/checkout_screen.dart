@@ -6,10 +6,10 @@ import 'package:provider/provider.dart';
 import '../config.dart';
 import '../models/venta.dart';
 import '../providers/carrito_provider.dart';
-import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/db_service.dart';
 import '../services/print_service.dart';
+import '../services/sync_service.dart';
 import '../widgets/numpad_widget.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -80,8 +80,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final carrito = context.read<CarritoProvider>();
       final itemsJson =
           jsonEncode(carrito.items.map((i) => i.toJson()).toList());
-      final token = (await AuthService.instance.getToken()) ?? '';
-      final terminal = (await AuthService.instance.getTerminal()) ?? '';
       final fecha = DateTime.now().toIso8601String();
 
       final venta = Venta(
@@ -94,25 +92,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         sincronizado: false,
       );
 
-      // 1. Save locally first (always succeeds if DB is available)
+      // 1. Guardar local primero
       final localId = await DbService.instance.insertVenta(venta);
 
-      // 2. Attempt immediate server sync
+      // 2. Intentar sincronizar inmediatamente con Supabase
       bool synced = false;
       try {
-        final escapedItems = itemsJson.replaceAll("'", "''");
-        final sp = "EXEC SPGuardarVenta "
-            "@Token='$token', "
-            "@IDTurno=${widget.idTurno}, "
-            "@Total=${widget.total.toStringAsFixed(0)}, "
-            "@MetodoPago='$_metodoPago', "
-            "@Items='$escapedItems', "
-            "@Terminal='$terminal'";
-        await ApiService.instance.post(sp);
+        await SyncService.instance.sincronizarPendientes();
         await DbService.instance.marcarVentaSincronizada(localId);
         synced = true;
       } catch (_) {
-        // Will be picked up by background sync later
         synced = false;
       }
 
