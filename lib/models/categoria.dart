@@ -29,14 +29,14 @@ class Categoria {
     );
   }
 
-  /// Creates a Categoria from a Supabase row.
+  /// Creates a Categoria from a Supabase row (tabla pos_categorias de mi-pos).
   factory Categoria.fromSupabase(Map<String, dynamic> json) {
     return Categoria(
-      id: (json['id_categoria'] as num).toInt(),
-      idLicencia: json['id_licencia'] as String?,
+      id: (json['id'] as num).toInt(),
+      idLicencia: json['licencia_email'] as String?,
       nombre: (json['nombre'] as String?) ?? '',
       color: json['color'] as String?,
-      activo: _parseBool(json['activo']),
+      activo: _parseBool(json['activo'] ?? true),
     );
   }
 

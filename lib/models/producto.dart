@@ -57,11 +57,11 @@ class Producto {
     );
   }
 
-  /// Creates a Producto from a Supabase row.
+  /// Creates a Producto from a Supabase row (tabla pos_productos de mi-pos).
   factory Producto.fromSupabase(Map<String, dynamic> json) {
     return Producto(
-      id: (json['id_producto'] as num).toInt(),
-      idLicencia: json['id_licencia'] as String?,
+      id: (json['id'] as num).toInt(),
+      idLicencia: json['licencia_email'] as String?,
       nombre: (json['nombre'] as String?) ?? '',
       precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
       precioVariable: _parseBool(json['precio_variable']),

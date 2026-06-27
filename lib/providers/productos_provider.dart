@@ -31,29 +31,27 @@ class ProductosProvider extends ChangeNotifier {
     _categorias = await DbService.instance.getCategorias();
     notifyListeners();
 
-    // 2. Intentar actualizar desde Supabase
+    // 2. Intentar actualizar desde Supabase (mismas tablas que mi-pos)
     try {
-      final userId = AuthService.instance.userId;
-      if (userId == null) return;
+      final email = AuthService.instance.email;
+      if (email == null) return;
 
       final prodRes = await supabase
-          .from('productos')
-          .select('*, categorias(nombre, color)')
-          .eq('id_licencia', userId)
+          .from('pos_productos')
+          .select()
+          .eq('licencia_email', email)
           .eq('activo', true)
           .order('nombre');
 
       final catRes = await supabase
-          .from('categorias')
+          .from('pos_categorias')
           .select()
-          .eq('id_licencia', userId)
-          .eq('activo', true)
+          .eq('licencia_email', email)
           .order('nombre');
 
       final prods = prodRes.map<Producto>((p) => Producto.fromSupabase(p)).toList();
       final cats = catRes.map<Categoria>((c) => Categoria.fromSupabase(c)).toList();
 
-      // Guardar en SQLite como cache offline
       for (final p in prods) await DbService.instance.upsertProducto(p);
       for (final c in cats) await DbService.instance.upsertCategoria(c);
 
@@ -84,48 +82,44 @@ class ProductosProvider extends ChangeNotifier {
   }
 
   Future<void> guardarProducto(Map<String, dynamic> datos) async {
-    final userId = AuthService.instance.userId;
-    if (userId == null) return;
+    final email = AuthService.instance.email;
+    if (email == null) return;
 
     final int id = (datos['id'] as int?) ?? 0;
-
     if (id == 0) {
-      await supabase.from('productos').insert({
-        'id_licencia': userId,
-        'nombre': datos['nombre'],
-        'precio': datos['precio'] ?? 0,
-        'costo': datos['costo'] ?? 0,
-        'iva': datos['iva'] ?? '10',
-        'id_categoria': datos['idCategoria'],
-        'codigo': datos['codigo'],
-        'color': datos['color'],
-        'activo': true,
+      await supabase.from('pos_productos').insert({
+        'licencia_email':  email,
+        'nombre':          datos['nombre'],
+        'precio':          datos['precio'] ?? 0,
         'precio_variable': datos['precioVariable'] ?? false,
+        'costo':           datos['costo'] ?? 0,
+        'codigo':          datos['codigo'],
+        'iva':             datos['iva']?.toString() ?? '10',
+        'color':           datos['color'],
+        'activo':          true,
       });
     } else {
-      await supabase.from('productos').update({
-        'nombre': datos['nombre'],
-        'precio': datos['precio'] ?? 0,
-        'costo': datos['costo'] ?? 0,
-        'iva': datos['iva'] ?? '10',
-        'id_categoria': datos['idCategoria'],
-        'codigo': datos['codigo'],
-        'color': datos['color'],
-        'activo': datos['activo'] ?? true,
+      await supabase.from('pos_productos').update({
+        'nombre':          datos['nombre'],
+        'precio':          datos['precio'] ?? 0,
         'precio_variable': datos['precioVariable'] ?? false,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id_licencia', userId).eq('id_producto', id);
+        'costo':           datos['costo'] ?? 0,
+        'codigo':          datos['codigo'],
+        'iva':             datos['iva']?.toString() ?? '10',
+        'color':           datos['color'],
+        'activo':          datos['activo'] ?? true,
+      }).eq('licencia_email', email).eq('id', id);
     }
     await cargar();
   }
 
   Future<void> eliminarProducto(int id) async {
-    final userId = AuthService.instance.userId;
-    if (userId == null) return;
-    await supabase.from('productos')
+    final email = AuthService.instance.email;
+    if (email == null) return;
+    await supabase.from('pos_productos')
         .update({'activo': false})
-        .eq('id_licencia', userId)
-        .eq('id_producto', id);
+        .eq('licencia_email', email)
+        .eq('id', id);
     await cargar();
   }
 }

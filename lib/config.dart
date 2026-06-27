@@ -4,8 +4,10 @@ const String kSupabaseUrl     = 'https://kmreiniqgcvqgdtzvmel.supabase.co';
 const String kSupabaseAnonKey = 'sb_publishable_j6btNHo1o3tSprmYUJITPw_8AsYgcvJ';
 
 // SharedPreferences keys
-const String kDeviceIdKey  = 'device_id';
-const String kTerminalKey  = 'terminal_nombre';
+const String kDeviceIdKey = 'device_id';
+const String kEmailKey    = 'lic_email';
+const String kTokenKey    = 'lic_token';
+const String kTerminalKey = 'pos_terminal';
 
 // Colors
 const Color kColorFondo             = Color(0xFF1a1a1a);

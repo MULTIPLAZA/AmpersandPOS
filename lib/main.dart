@@ -8,15 +8,17 @@ import 'providers/carrito_provider.dart';
 import 'providers/productos_provider.dart';
 import 'providers/turno_provider.dart';
 import 'screens/splash_screen.dart';
+import 'services/auth_service.dart';
 import 'services/db_service.dart';
 
-// Acceso global al cliente Supabase
+// Acceso global al cliente Supabase (anon key, sin Auth)
 final supabase = Supabase.instance.client;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: kSupabaseUrl, anonKey: kSupabaseAnonKey);
   await DbService.instance.init();
+  await AuthService.instance.init();
   runApp(
     MultiProvider(
       providers: [
