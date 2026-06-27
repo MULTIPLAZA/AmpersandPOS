@@ -21,11 +21,10 @@ class ApiService {
   /// - A network or TLS error occurs
   /// - The response cannot be parsed as JSON
   Future<List<dynamic>> post(String sp) async {
-    final HttpClient client = HttpClient()
-      // Accept self-signed / untrusted certificates (internal server)
-      ..badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true
-      ..connectionTimeout = const Duration(seconds: 15);
+    final HttpClient client = HttpClient();
+    client.badCertificateCallback =
+        (X509Certificate cert, String host, int port) => true;
+    client.connectionTimeout = const Duration(seconds: 15);
 
     HttpClientRequest request;
     try {
