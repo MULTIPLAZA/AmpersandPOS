@@ -9,7 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.0
+  supabase_flutter: ^2.5.0
+  connectivity_plus: ^6.0.3
   sqflite: ^2.3.3+1
   path: ^1.9.0
   shared_preferences: ^2.3.2

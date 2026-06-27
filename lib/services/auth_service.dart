@@ -1,97 +1,92 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-
 import '../config.dart';
-import 'api_service.dart';
+import '../main.dart';
 
 class AuthService {
   static final AuthService instance = AuthService._();
   AuthService._();
 
-  Future<String?> getToken() async {
+  String? get userId => supabase.auth.currentUser?.id;
+  bool get isLoggedIn => supabase.auth.currentSession != null;
+
+  Future<String> getDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(kLicTokenKey);
+    String? id = prefs.getString(kDeviceIdKey);
+    if (id == null) {
+      id = const Uuid().v4();
+      await prefs.setString(kDeviceIdKey, id);
+    }
+    return id;
   }
 
-  Future<String?> getEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(kEmailKey);
-  }
-
-  Future<String?> getTerminal() async {
+  Future<String?> getTerminalName() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(kTerminalKey);
   }
 
-  /// Returns the stored device ID, generating and persisting one if absent.
-  Future<String> getDeviceId() async {
+  Future<void> _saveTerminalName(String name) async {
     final prefs = await SharedPreferences.getInstance();
-    String? deviceId = prefs.getString(kDeviceIdKey);
-    if (deviceId == null) {
-      deviceId = const Uuid().v4();
-      await prefs.setString(kDeviceIdKey, deviceId);
-    }
-    return deviceId;
+    await prefs.setString(kTerminalKey, name);
   }
 
-  /// Calls SPActivarLicencia, stores token + email + terminal on success.
-  Future<bool> activarLicencia(
-    String email,
-    String clave,
-    String terminal,
-  ) async {
+  /// Login con email/clave. Retorna mapa con ok, error, plan, vence, nombreNegocio.
+  Future<Map<String, dynamic>> login(String email, String clave, String terminal) async {
     try {
-      final deviceId = await getDeviceId();
-
-      final response = await ApiService.instance.post(
-        "Exec SPActivarLicencia @Email='$email', @Clave='$clave',"
-        " @DeviceID='$deviceId', @NombreTerminal='$terminal', @Modo='ACTIVAR'",
+      final res = await supabase.auth.signInWithPassword(
+        email: email.trim(),
+        password: clave,
       );
 
-      if (response.isEmpty || (response[0] as List).isEmpty) return false;
+      if (res.user == null) {
+        return {'ok': false, 'error': 'Credenciales incorrectas'};
+      }
 
-      final row = (response[0] as List).first as Map<String, dynamic>;
-      final token = row['Token'] as String?;
-      if (token == null || token.isEmpty) return false;
+      // Verificar licencia activa
+      final licencia = await supabase
+          .from('licencias')
+          .select()
+          .eq('id', res.user!.id)
+          .eq('activo', true)
+          .maybeSingle();
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(kLicTokenKey, token);
-      await prefs.setString(kEmailKey, email);
-      await prefs.setString(kTerminalKey, terminal);
+      if (licencia == null) {
+        await supabase.auth.signOut();
+        return {'ok': false, 'error': 'No tienes licencia activa. Contactá a NODO.'};
+      }
 
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+      final vence = DateTime.parse(licencia['fecha_vence'] as String);
+      if (vence.isBefore(DateTime.now())) {
+        await supabase.auth.signOut();
+        return {'ok': false, 'error': 'Licencia vencida el ${licencia['fecha_vence']}'};
+      }
 
-  /// Returns true when the server confirms the stored token is still valid.
-  Future<bool> verificarLicencia() async {
-    try {
-      final token = await getToken();
-      final email = await getEmail();
-      if (token == null || email == null) return false;
-
+      // Registrar dispositivo
       final deviceId = await getDeviceId();
+      await _saveTerminalName(terminal);
 
-      final response = await ApiService.instance.post(
-        "Exec SPVerificarLicencia @Token='$token',"
-        " @Email='$email', @DeviceID='$deviceId'",
-      );
+      await supabase.from('activaciones').upsert({
+        'id_licencia': res.user!.id,
+        'device_id': deviceId,
+        'nombre_terminal': terminal,
+        'activo': true,
+      }, onConflict: 'device_id');
 
-      // Accessing response[0][0] throws if the server returned no rows.
-      final _ = (response[0] as List).first;
-      return true;
-    } catch (_) {
-      return false;
+      return {
+        'ok': true,
+        'plan': licencia['plan'],
+        'vence': licencia['fecha_vence'],
+        'nombre_negocio': licencia['nombre_negocio'] ?? '',
+      };
+    } on AuthException catch (e) {
+      return {'ok': false, 'error': e.message};
+    } catch (e) {
+      return {'ok': false, 'error': 'Error de conexión: $e'};
     }
   }
 
-  /// Removes session credentials from SharedPreferences.
-  Future<void> clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(kLicTokenKey);
-    await prefs.remove(kEmailKey);
-    await prefs.remove(kTerminalKey);
+  Future<void> logout() async {
+    await supabase.auth.signOut();
   }
 }

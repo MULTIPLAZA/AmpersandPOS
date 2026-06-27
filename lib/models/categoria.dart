@@ -29,14 +29,14 @@ class Categoria {
     );
   }
 
-  /// Creates a Categoria from an APISQL JSON response row.
-  factory Categoria.fromJson(Map<String, dynamic> json) {
+  /// Creates a Categoria from a Supabase row.
+  factory Categoria.fromSupabase(Map<String, dynamic> json) {
     return Categoria(
-      id: (json['IDCategoria'] as num).toInt(),
-      idLicencia: json['IDLicencia'] as String?,
-      nombre: (json['Nombre'] as String?) ?? '',
-      color: json['Color'] as String?,
-      activo: _parseBool(json['Activo']),
+      id: (json['id_categoria'] as num).toInt(),
+      idLicencia: json['id_licencia'] as String?,
+      nombre: (json['nombre'] as String?) ?? '',
+      color: json['color'] as String?,
+      activo: _parseBool(json['activo']),
     );
   }
 

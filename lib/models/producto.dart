@@ -57,21 +57,21 @@ class Producto {
     );
   }
 
-  /// Creates a Producto from an APISQL JSON response row.
-  factory Producto.fromJson(Map<String, dynamic> json) {
+  /// Creates a Producto from a Supabase row.
+  factory Producto.fromSupabase(Map<String, dynamic> json) {
     return Producto(
-      id: (json['IDProducto'] as num).toInt(),
-      idLicencia: json['IDLicencia'] as String?,
-      nombre: (json['Nombre'] as String?) ?? '',
-      precio: (json['Precio'] as num?)?.toDouble() ?? 0.0,
-      precioVariable: _parseBool(json['PrecioVariable']),
-      costo: (json['Costo'] as num?)?.toDouble() ?? 0.0,
-      codigo: json['Codigo'] as String?,
-      codigosExtra: json['CodigosExtra'] as String?,
-      iva: (json['IVA'] as num?)?.toInt() ?? 0,
-      color: json['Color'] as String?,
-      idCategoria: (json['IDCategoria'] as num?)?.toInt(),
-      activo: _parseBool(json['Activo']),
+      id: (json['id_producto'] as num).toInt(),
+      idLicencia: json['id_licencia'] as String?,
+      nombre: (json['nombre'] as String?) ?? '',
+      precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
+      precioVariable: _parseBool(json['precio_variable']),
+      costo: (json['costo'] as num?)?.toDouble() ?? 0.0,
+      codigo: json['codigo'] as String?,
+      codigosExtra: json['codigos_extra'] as String?,
+      iva: int.tryParse(json['iva']?.toString() ?? '10') ?? 10,
+      color: json['color'] as String?,
+      idCategoria: (json['id_categoria'] as num?)?.toInt(),
+      activo: _parseBool(json['activo']),
     );
   }
 

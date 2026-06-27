@@ -1,8 +1,5 @@
-import 'package:flutter/foundation.dart';
-
-import '../models/categoria.dart';
-import '../models/producto.dart';
-import 'api_service.dart';
+import 'dart:convert';
+import '../main.dart';
 import 'auth_service.dart';
 import 'db_service.dart';
 
@@ -10,80 +7,48 @@ class SyncService {
   static final SyncService instance = SyncService._();
   SyncService._();
 
-  /// Uploads local ventas that have not yet been sent to the server.
-  Future<void> sincronizarVentas() async {
+  /// Sube al Supabase todas las ventas pendientes guardadas en SQLite offline.
+  Future<void> sincronizarPendientes() async {
     final ventas = await DbService.instance.getVentasSinSincronizar();
-    if (ventas.isEmpty) return;
-
-    final token = await AuthService.instance.getToken();
-    if (token == null) return;
-
-    final terminal = await AuthService.instance.getTerminal() ?? '';
+    final userId = AuthService.instance.userId;
+    if (userId == null || ventas.isEmpty) return;
 
     for (final venta in ventas) {
       try {
-        // Escape single quotes inside the JSON blob so it doesn't break the SP call.
-        final escapedItems = venta.itemsJson.replaceAll("'", "''");
+        // Insertar cabecera en Supabase
+        final ventaRes = await supabase.from('ventas').insert({
+          'id_licencia': userId,
+          'id_turno': venta.idTurno,
+          'terminal': venta.terminal ?? '',
+          'total': venta.total,
+          'metodo_pago': venta.metodoPago,
+          'estado': 'completada',
+          'fecha': venta.fecha,
+        }).select('id_venta').single();
 
-        await ApiService.instance.post(
-          "Exec SPGuardarVenta @Token='$token',"
-          " @IDTurno=${venta.idTurno},"
-          " @Total=${venta.total},"
-          " @MetodoPago='${venta.metodoPago}',"
-          " @Items='$escapedItems',"
-          " @Terminal='$terminal'",
-        );
+        final idVenta = ventaRes['id_venta'] as int;
 
-        if (venta.id != null) {
-          await DbService.instance.marcarVentaSincronizada(venta.id!);
+        // Insertar líneas
+        final items = jsonDecode(venta.itemsJson) as List<dynamic>;
+        final lineas = items.map((item) => {
+          'id_licencia': userId,
+          'id_venta': idVenta,
+          'id_producto': item['id'],
+          'nombre_producto': item['nombre'],
+          'cantidad': item['cantidad'],
+          'precio_unitario': item['precio'],
+          'iva': item['iva'] ?? '10',
+          'categoria': item['categoria'],
+        }).toList();
+
+        if (lineas.isNotEmpty) {
+          await supabase.from('venta_lineas').insert(lineas);
         }
-      } catch (e) {
-        // Non-fatal: log and continue with next venta.
-        debugPrint('SyncService.sincronizarVentas — venta ${venta.id}: $e');
+
+        await DbService.instance.marcarVentaSincronizada(venta.id!);
+      } catch (_) {
+        // Deja la venta como pendiente para reintentar después
       }
-    }
-  }
-
-  /// Downloads the product catalog (categories + products) from the server.
-  Future<void> descargarCatalogo() async {
-    final token = await AuthService.instance.getToken();
-    if (token == null) return;
-
-    // Categories
-    final catResponse = await ApiService.instance.post(
-      "Exec SPListarCategorias @Token='$token'",
-    );
-    if (catResponse.isNotEmpty) {
-      for (final row in (catResponse[0] as List)) {
-        final cat = Categoria.fromJson(row as Map<String, dynamic>);
-        await DbService.instance.upsertCategoria(cat);
-      }
-    }
-
-    // Products
-    final prodResponse = await ApiService.instance.post(
-      "Exec SPListarProductos @Token='$token', @SoloActivos=1",
-    );
-    if (prodResponse.isNotEmpty) {
-      for (final row in (prodResponse[0] as List)) {
-        final prod = Producto.fromJson(row as Map<String, dynamic>);
-        await DbService.instance.upsertProducto(prod);
-      }
-    }
-  }
-
-  /// Uploads pending ventas and then refreshes the local catalog.
-  /// Errors in either step are swallowed so callers never crash.
-  Future<void> sincronizarTodo() async {
-    try {
-      await sincronizarVentas();
-    } catch (e) {
-      debugPrint('SyncService.sincronizarVentas failed: $e');
-    }
-    try {
-      await descargarCatalogo();
-    } catch (e) {
-      debugPrint('SyncService.descargarCatalogo failed: $e');
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
 import 'providers/auth_provider.dart';
@@ -9,8 +10,12 @@ import 'providers/turno_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/db_service.dart';
 
+// Acceso global al cliente Supabase
+final supabase = Supabase.instance.client;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(url: kSupabaseUrl, anonKey: kSupabaseAnonKey);
   await DbService.instance.init();
   runApp(
     MultiProvider(
